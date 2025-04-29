@@ -99,16 +99,16 @@ app.get('/auth/callback', async (req, res) => {
       }
 
       // Redirect after session is saved
+      console.log("Session after login: ", req.session); // This log is fine here
       res.redirect(`${process.env.CLIENT_URL}`);
     });
-    
-    console.log("Session after login: ", req.session);
-    res.redirect(`${process.env.CLIENT_URL}`);
+
   } catch (error) {
     console.error('Error during authentication', error.response?.data || error.message);
     res.status(500).send('Error during authentication');
   }
 });
+
 
 app.get('/auth/token', (req, res) => {
   console.log('Session at /auth/token:', req.session); 
