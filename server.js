@@ -5,6 +5,7 @@ import axios from 'axios';
 import session from 'express-session';
 import mongoose from 'mongoose';
 import MongoStore from 'connect-mongo';
+import cookieParser from 'cookie-parser';
 
 config();
 
@@ -14,10 +15,11 @@ const spotify_client_secret = process.env.SPOTIFY_CLIENT_SECRET;
 const mongoURL = process.env.MONGO_URL;
 
 const app = express();
-// Trust proxy is crucial for Heroku
+
 app.set('trust proxy', 1);
 
-// Enable CORS
+app.use(cookieParser());
+
 app.use(
   cors({
     origin: process.env.CLIENT_URL,
@@ -26,10 +28,8 @@ app.use(
   })
 );
 
-// Use express.json() before session
 app.use(express.json());
 
-// Session configuration
 const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'your_secret_key',
   resave: false,
@@ -111,6 +111,16 @@ app.get('/auth/callback', async (req, res) => {
 
     const { access_token, refresh_token, expires_in } = response.data;
 
+    res.cookie('access_token', access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+      domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
+      maxAge: expires_in * 1000,
+      path: '/',
+    });
+    
+
     // Store the tokens in the session
     req.session.access_token = access_token;
     req.session.refresh_token = refresh_token;
@@ -129,10 +139,9 @@ app.get('/auth/callback', async (req, res) => {
       });
     }).then(() => {
       console.log('Session after login: ', req.session);
-      res.redirect(`${process.env.CLIENT_URL}`); // Redirect *after* successful save
+      res.redirect(`${process.env.CLIENT_URL}`);
     }).catch((err) => {
-      // Handle the error from session.save()
-      res.status(500).send('Error saving session'); // Send error response
+      res.status(500).send('Error saving session');
     });
 
 
@@ -144,11 +153,11 @@ app.get('/auth/callback', async (req, res) => {
 
 // Get token
 app.get('/auth/token', (req, res) => {
-  console.log('Session at /auth/token:', req.session);
-  if (req.session.access_token) {
-    res.json({ access_token: req.session.access_token });
+  console.log('Cookies:', req.cookies);
+  const token = req.cookies.access_token;
+  if (token) {
+    res.json({ access_token: token });
   } else {
-    console.log('No access token available');
     res.status(400).json({ error: 'No access token available' });
   }
 });
