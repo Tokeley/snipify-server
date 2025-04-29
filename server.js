@@ -99,18 +99,16 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
-// Route to get access token from session
 app.get('/auth/token', (req, res) => {
-  console.log('Get token');
+  console.log('Session at /auth/token:', req.session); 
   if (req.session.access_token) {
-      res.json({
-          access_token: req.session.access_token
-      });
+      res.json({ access_token: req.session.access_token });
   } else {
       console.log('No access token available');
       res.status(400).json({ error: 'No access token available' });
   }
 });
+
 
 // Logout route
 app.get('/auth/logout', (req, res) => {
