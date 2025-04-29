@@ -2,202 +2,112 @@ import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
 import axios from 'axios';
-import session from 'express-session';
-import mongoose from 'mongoose';
-import MongoStore from 'connect-mongo';
-import cookieParser from 'cookie-parser';
+import querystring from 'querystring';
+import crypto from 'crypto';
 
 config();
 
-const port = 5001;
-const spotify_client_id = process.env.SPOTIFY_CLIENT_ID;
-const spotify_client_secret = process.env.SPOTIFY_CLIENT_SECRET;
-const mongoURL = process.env.MONGO_URL;
-
 const app = express();
+const port = process.env.PORT || 5001;
 
-app.set('trust proxy', 1);
+const client_id = process.env.SPOTIFY_CLIENT_ID;
+const client_secret = process.env.SPOTIFY_CLIENT_SECRET;
+const redirect_uri = `${process.env.SERVER_URL}/auth/callback`;
 
-app.use(cookieParser());
+const generateRandomString = (length) => {
+  return crypto.randomBytes(60).toString('hex').slice(0, length);
+};
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL,
-    methods: ['GET', 'POST'],
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: process.env.CLIENT_URL,
+  methods: ['GET', 'POST'],
+}));
 
 app.use(express.json());
 
-const sessionMiddleware = session({
-  secret: process.env.SESSION_SECRET || 'your_secret_key',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: mongoURL,
-    collectionName: 'sessions',
-    touchAfter: 24 * 3600,
-  }),
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    httpOnly: true,
-    path: '/',
-  },
-});
-app.use(sessionMiddleware);
-
-
-
-// Start the server
-const server = app.listen(process.env.PORT || port, () => {
-  console.log(`Listening at ${process.env.SERVER_URL}`);
-  console.log('Server is running!');
-});
-
-// Handle server errors
-server.on('error', (error) => {
-  console.error('Server error:', error);
-});
-
-// Auth login route
+// Spotify login
 app.get('/auth/login', (req, res) => {
-  console.log('Login');
-  const scope =
-    'streaming user-read-email user-read-private playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private';
-
   const state = generateRandomString(16);
+  const scope = 'streaming user-read-email user-read-private playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private';
 
-  const auth_query_parameters = new URLSearchParams({
+  const auth_query_parameters = querystring.stringify({
     response_type: 'code',
-    client_id: spotify_client_id,
+    client_id: client_id,
     scope: scope,
-    redirect_uri: `${process.env.SERVER_URL}/auth/callback`,
-    state: state,
+    redirect_uri: redirect_uri,
+    state: state
   });
 
-  res.redirect('https://accounts.spotify.com/authorize?' + auth_query_parameters.toString());
+  res.redirect(`https://accounts.spotify.com/authorize?${auth_query_parameters}`);
 });
 
-// Auth callback route
+// Spotify callback
 app.get('/auth/callback', async (req, res) => {
-  console.log('Callback');
-  console.log('Session from callback:', req.session);
-  const code = req.query.code;
+  const code = req.query.code || null;
 
   if (!code) {
     return res.status(400).send('Authorization code is missing');
   }
 
   try {
-    const response = await axios.post(
+    const tokenResponse = await axios.post(
       'https://accounts.spotify.com/api/token',
-      new URLSearchParams({
+      querystring.stringify({
         code: code,
-        redirect_uri: `${process.env.SERVER_URL}/auth/callback`,
+        redirect_uri: redirect_uri,
         grant_type: 'authorization_code',
-      }).toString(),
+      }),
       {
         headers: {
-          Authorization:
-            'Basic ' +
-            Buffer.from(`${spotify_client_id}:${spotify_client_secret}`).toString('base64'),
+          'Authorization': 'Basic ' + Buffer.from(client_id + ':' + client_secret).toString('base64'),
           'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        }
       }
     );
 
-    const { access_token, refresh_token, expires_in } = response.data;
+    const { access_token, refresh_token } = tokenResponse.data;
 
-    res.cookie('access_token', access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-      maxAge: expires_in * 1000,
-      path: '/',
-    });
-    
-
-    // Store the tokens in the session
-    req.session.access_token = access_token;
-    req.session.refresh_token = refresh_token;
-    req.session.expires_in = expires_in;
-    req.session.cookie.maxAge = expires_in * 1000;
-
-    // Await the completion of the session save operation
-    new Promise((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) {
-          console.error('Error saving session: ', err);
-          reject(err); // Reject the promise on error
-        } else {
-          resolve(); // Resolve the promise on success
-        }
-      });
-    }).then(() => {
-      console.log('Session after login: ', req.session);
-      res.redirect(`${process.env.CLIENT_URL}` +
-        querystring.stringify({
-          access_token: access_token,
-          refresh_token: refresh_token
-        }));
-
-    }).catch((err) => {
-      res.status(500).send('Error saving session');
-    });
-
-
+    // Redirect to client with tokens in URL
+    res.redirect(`${process.env.CLIENT_URL}/#${querystring.stringify({
+      access_token,
+      refresh_token,
+    })}`);
   } catch (error) {
-    console.error('Error during authentication:', error.response?.data || error.message);
-    res.status(500).send('Error during authentication: ' + (error.response?.data?.error_description || error.message));
+    console.error('Error during token exchange:', error.response?.data || error.message);
+    res.status(500).send('Failed to get access token');
   }
 });
 
-// Get token
-app.get('/auth/token', (req, res) => {
-  console.log('Cookies:', req.cookies);
-  const token = req.cookies.access_token;
-  if (token) {
-    res.json({ access_token: token });
-  } else {
-    res.status(400).json({ error: 'No access token available' });
-  }
-});
+// Optional: Refresh token endpoint
+app.get('/auth/refresh_token', async (req, res) => {
+  const refresh_token = req.query.refresh_token;
 
-// Logout
-app.get('/auth/logout', (req, res) => {
-  console.log('Logout');
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('Error destroying session:', err);
-      return res.status(500).send('Error logging out');
-    }
-    res.clearCookie('connect.sid', {
-      path: '/',
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  try {
+    const response = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      querystring.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: refresh_token,
+      }),
+      {
+        headers: {
+          Authorization: 'Basic ' + Buffer.from(client_id + ':' + client_secret).toString('base64'),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        }
+      }
+    );
+
+    res.send({
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token || refresh_token,
     });
-    res.status(200).send('Logged out successfully');
-  });
+  } catch (error) {
+    console.error('Error refreshing token:', error.response?.data || error.message);
+    res.status(500).send('Failed to refresh token');
+  }
 });
 
-// Helper function
-const generateRandomString = (length) => {
-  let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < length; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
-};
-
-// Connect to MongoDB
-mongoose
-  .connect(mongoURL)
-  .then(() => {
-    console.log('Connected to MongoDB');
-  })
-  .catch((err) => {
-    console.error('Error connecting to MongoDB:', err);
-  });
+// Start server
+app.listen(port, () => {
+  console.log(`Listening on ${process.env.SERVER_URL}`);
+});
