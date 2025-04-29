@@ -5,7 +5,6 @@ import axios from 'axios';
 import session from 'express-session';
 import mongoose from 'mongoose';
 import MongoStore from 'connect-mongo';
-import cookieParser from 'cookie-parser';
 
 config();
 
@@ -17,8 +16,6 @@ const mongoURL = process.env.MONGO_URL;
 const app = express();
 
 app.set('trust proxy', 1);
-
-app.use(cookieParser());
 
 app.use(
   cors({
@@ -53,7 +50,7 @@ app.use(sessionMiddleware);
 
 // Start the server
 const server = app.listen(process.env.PORT || port, () => {
-  console.log(`Listening at ${process.env.SERVER_URL}`);
+  console.log('Listening at ${process.env.SERVER_URL}');
   console.log('Server is running!');
 });
 
@@ -111,16 +108,6 @@ app.get('/auth/callback', async (req, res) => {
 
     const { access_token, refresh_token, expires_in } = response.data;
 
-    res.cookie('access_token', access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-      domain: process.env.NODE_ENV === 'production' ? 'floating-journey-45917-b9d3c6ebc783.herokuapp.com' : undefined,
-      maxAge: expires_in * 1000,
-      path: '/',
-    });
-    
-
     // Store the tokens in the session
     req.session.access_token = access_token;
     req.session.refresh_token = refresh_token;
@@ -153,11 +140,11 @@ app.get('/auth/callback', async (req, res) => {
 
 // Get token
 app.get('/auth/token', (req, res) => {
-  console.log('Cookies:', req.cookies);
-  const token = req.cookies.access_token;
-  if (token) {
-    res.json({ access_token: token });
+  console.log('Session at /auth/token:', req.session);
+  if (req.session.access_token) {
+    res.json({ access_token: req.session.access_token });
   } else {
+    console.log('No access token available');
     res.status(400).json({ error: 'No access token available' });
   }
 });
@@ -174,7 +161,7 @@ app.get('/auth/logout', (req, res) => {
       path: '/',
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
+      domain: process.env.NODE_ENV === 'production' ? 'floating-journey-45917-b9d3c6ebc783.herokuapp.com' : undefined,
     });
     res.status(200).send('Logged out successfully');
   });
