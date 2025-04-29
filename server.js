@@ -115,7 +115,7 @@ app.get('/auth/callback', async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-      domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
+      domain: process.env.NODE_ENV === 'production' ? 'https://floating-journey-45917-b9d3c6ebc783.herokuapp.com' : undefined,
       maxAge: expires_in * 1000,
       path: '/',
     });
