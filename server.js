@@ -30,25 +30,26 @@ app.use(
 app.use(express.json());
 
 // Session configuration
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'your_secret_key',
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: mongoURL,
-      collectionName: 'sessions',
-      touchAfter: 24 * 3600,
-    }),
-    cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      httpOnly: true,
-      domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
-      path: '/', // Explicitly set the path
-    },
-  })
-);
+const sessionMiddleware = session({
+  secret: process.env.SESSION_SECRET || 'your_secret_key',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: mongoURL,
+    collectionName: 'sessions',
+    touchAfter: 24 * 3600,
+  }),
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    httpOnly: true,
+    domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
+    path: '/',
+  },
+});
+app.use(sessionMiddleware);
+
+
 
 // Start the server
 const server = app.listen(process.env.PORT || port, () => {
@@ -116,15 +117,22 @@ app.get('/auth/callback', async (req, res) => {
     req.session.expires_in = expires_in;
     req.session.cookie.maxAge = expires_in * 1000;
 
-     // IMPORTANT:  Save the session *before* any possible redirect or response
-    req.session.save(async (err) => { // Make the callback async to use await
+    // Await the completion of the session save operation
+    new Promise((resolve, reject) => {
+      req.session.save((err) => {
         if (err) {
-            console.error('Error saving session:', err);
-            return res.status(500).send('Error saving session');
+          console.error('Error saving session: ', err);
+          reject(err); // Reject the promise on error
+        } else {
+          resolve(); // Resolve the promise on success
         }
-        console.log("Session after login: ", req.session);
-        // Only redirect *after* the session has been successfully saved
-        res.redirect(`${process.env.CLIENT_URL}`);
+      });
+    }).then(() => {
+      console.log('Session after login: ', req.session);
+      res.redirect(`${process.env.CLIENT_URL}`); // Redirect *after* successful save
+    }).catch((err) => {
+      // Handle the error from session.save()
+      res.status(500).send('Error saving session'); // Send error response
     });
 
 
