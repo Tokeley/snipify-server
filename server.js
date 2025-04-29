@@ -137,13 +137,12 @@ app.get('/auth/callback', async (req, res) => {
       });
     }).then(() => {
       console.log('Session after login: ', req.session);
-      res.redirect(`${process.env.CLIENT_URL}`);
       res.redirect(`${process.env.CLIENT_URL}` +
         querystring.stringify({
           access_token: access_token,
           refresh_token: refresh_token
         }));
-        
+
     }).catch((err) => {
       res.status(500).send('Error saving session');
     });
