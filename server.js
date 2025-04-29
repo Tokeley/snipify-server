@@ -91,6 +91,17 @@ app.get('/auth/callback', async (req, res) => {
 
     // Store the access token in the session
     req.session.access_token = response.data.access_token;
+
+    req.session.save((err) => {
+      if (err) {
+        console.error('Error saving session:', err);
+        return res.status(500).send('Error saving session');
+      }
+
+      // Redirect after session is saved
+      res.redirect(`${process.env.CLIENT_URL}`);
+    });
+    
     console.log("Session after login: ", req.session);
     res.redirect(`${process.env.CLIENT_URL}`);
   } catch (error) {
