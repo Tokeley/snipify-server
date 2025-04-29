@@ -43,7 +43,6 @@ const sessionMiddleware = session({
     secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     httpOnly: true,
-    domain: process.env.NODE_ENV === 'production' ? 'floating-journey-45917-b9d3c6ebc783.herokuapp.com' : undefined,
     path: '/',
   },
 });
@@ -115,7 +114,6 @@ app.get('/auth/callback', async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-      domain: process.env.NODE_ENV === 'production' ? 'floating-journey-45917-b9d3c6ebc783.herokuapp.com' : undefined,
       maxAge: expires_in * 1000,
       path: '/',
     });
@@ -174,7 +172,6 @@ app.get('/auth/logout', (req, res) => {
       path: '/',
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      domain: process.env.NODE_ENV === 'production' ? 'floating-journey-45917-b9d3c6ebc783.herokuapp.com' : undefined,
     });
     res.status(200).send('Logged out successfully');
   });
