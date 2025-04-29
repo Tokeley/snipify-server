@@ -6,65 +6,78 @@ import session from 'express-session';
 import mongoose from 'mongoose';
 import MongoStore from 'connect-mongo';
 
-const port = 5001;
 config();
 
+const port = 5001;
 const spotify_client_id = process.env.SPOTIFY_CLIENT_ID;
 const spotify_client_secret = process.env.SPOTIFY_CLIENT_SECRET;
-const mongoURL = process.env.MONGO_URL; // MongoDB connection string
+const mongoURL = process.env.MONGO_URL;
 
 const app = express();
+// Trust proxy is crucial for Heroku and other PaaS
 app.set('trust proxy', 1);
 
-// Enable CORS for the React frontend (allow cross-origin requests)
-app.use(cors({
-  origin: `${process.env.CLIENT_URL}`,  // Your React frontend URL
-  methods: ['GET', 'POST'],   
-  credentials: true,      
-}));
+// Enable CORS
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  })
+);
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your_secret_key',
-  resave: false,
-  saveUninitialized: true,
-  store: MongoStore.create({
-    mongoUrl: mongoURL,
-    collectionName: 'sessions',
-  }),
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined, // <-- ADD THIS
-  }
-}));
+// Use express.json() *before* the session middleware
+app.use(express.json());
 
-app.listen(process.env.PORT || port, () => {
+// Session configuration
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'your_secret_key',
+    resave: false,
+    saveUninitialized: false, // Changed to false
+    store: MongoStore.create({
+      mongoUrl: mongoURL,
+      collectionName: 'sessions',
+      // Added touchAfter to minimize session updates
+      touchAfter: 24 * 3600, // Update session only after 24 hours (in seconds)
+    }),
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      httpOnly: true, // Added httpOnly: true for security
+      domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
+    },
+  })
+);
+
+// Start the server
+const server = app.listen(process.env.PORT || port, () => {
   console.log(`Listening at ${process.env.SERVER_URL}`);
-  console.log('Hello');
+  console.log('Server is running!');
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('Server error:', error);
 });
 
 // Auth login route
 app.get('/auth/login', (req, res) => {
-    console.log('Login');
-    var scope = "streaming \
-                 user-read-email \
-                 user-read-private \
-                 playlist-read-private \
-                 playlist-read-collaborative\
-                 playlist-modify-public\
-                 playlist-modify-private";
-  
-    var state = generateRandomString(16);
-  
-    var auth_query_parameters = new URLSearchParams({
-      response_type: "code",
-      client_id: spotify_client_id,
-      scope: scope,
-      redirect_uri: `${process.env.SERVER_URL}/auth/callback`,
-      state: state
-    });
-  
-    res.redirect('https://accounts.spotify.com/authorize/?' + auth_query_parameters.toString());
+  console.log('Login');
+  const scope =
+    'streaming user-read-email user-read-private playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private';
+
+  const state = generateRandomString(16);
+
+  const auth_query_parameters = new URLSearchParams({
+    response_type: 'code',
+    client_id: spotify_client_id,
+    scope: scope,
+    redirect_uri: `${process.env.SERVER_URL}/auth/callback`,
+    state: state,
+  });
+
+  res.redirect('https://accounts.spotify.com/authorize?' + auth_query_parameters.toString()); // Corrected URL
 });
 
 // Auth callback route
@@ -73,9 +86,13 @@ app.get('/auth/callback', async (req, res) => {
   console.log('Session from callback:', req.session);
   const code = req.query.code;
 
+  if (!code) {
+    return res.status(400).send('Authorization code is missing');
+  }
+
   try {
     const response = await axios.post(
-      'https://accounts.spotify.com/api/token',
+      'https://accounts.spotify.com/api/token', // Corrected URL
       new URLSearchParams({
         code: code,
         redirect_uri: `${process.env.SERVER_URL}/auth/callback`,
@@ -83,48 +100,50 @@ app.get('/auth/callback', async (req, res) => {
       }).toString(),
       {
         headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${spotify_client_id}:${spotify_client_secret}`).toString('base64'),
+          Authorization:
+            'Basic ' +
+            Buffer.from(`${spotify_client_id}:${spotify_client_secret}`).toString('base64'),
           'Content-Type': 'application/x-www-form-urlencoded',
-        }
+        },
       }
     );
 
-    // Store the access token in the session
-    req.session.access_token = response.data.access_token;
+    const { access_token, refresh_token, expires_in } = response.data;
+
+    // Store the tokens in the session
+    req.session.access_token = access_token;
+    req.session.refresh_token = refresh_token;
+    req.session.expires_in = expires_in; // Store expiration
+    req.session.cookie.maxAge = expires_in * 1000; // Set cookie expiration
 
     req.session.save((err) => {
       if (err) {
         console.error('Error saving session:', err);
         return res.status(500).send('Error saving session');
       }
-
-      // Redirect after session is saved
-      console.log("Session after login: ", req.session); // This log is fine here
+      console.log('Session after login: ', req.session);
       res.redirect(`${process.env.CLIENT_URL}`);
     });
-
   } catch (error) {
-    console.error('Error during authentication', error.response?.data || error.message);
-    res.status(500).send('Error during authentication');
+    console.error('Error during authentication:', error.response?.data || error.message);
+    res.status(500).send('Error during authentication: ' + (error.response?.data?.error_description || error.message)); // Include more error info
   }
 });
 
-
+// Get token
 app.get('/auth/token', (req, res) => {
-  console.log('Session at /auth/token:', req.session); 
+  console.log('Session at /auth/token:', req.session);
   if (req.session.access_token) {
-      res.json({ access_token: req.session.access_token });
+    res.json({ access_token: req.session.access_token });
   } else {
-      console.log('No access token available');
-      res.status(400).json({ error: 'No access token available' });
+    console.log('No access token available');
+    res.status(400).json({ error: 'No access token available' });
   }
 });
 
-
-// Logout route
+// Logout
 app.get('/auth/logout', (req, res) => {
   console.log('Logout');
-  req.session.access_token = null; // Clear the access token from the session
   req.session.destroy((err) => {
     if (err) {
       console.error('Error destroying session:', err);
@@ -132,21 +151,31 @@ app.get('/auth/logout', (req, res) => {
     }
     res.clearCookie('connect.sid', {
       path: '/',
-      secure: process.env.NODE_ENV === 'production', 
+      secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
     });
     res.status(200).send('Logged out successfully');
   });
 });
 
-
-// Helper function to generate random string for state
-var generateRandomString = function (length) {
-    var text = '';
-    var possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-    for (var i = 0; i < length; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
+// Helper function
+const generateRandomString = (length) => {
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < length; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
 };
+
+// Connect to MongoDB
+mongoose
+  .connect(mongoURL)
+  .then(() => {
+    console.log('Connected to MongoDB');
+  })
+  .catch((err) => {
+    console.error('Error connecting to MongoDB:', err);
+  });
+
