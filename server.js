@@ -14,7 +14,7 @@ const spotify_client_secret = process.env.SPOTIFY_CLIENT_SECRET;
 const mongoURL = process.env.MONGO_URL;
 
 const app = express();
-// Trust proxy is crucial for Heroku and other PaaS
+// Trust proxy is crucial for Heroku
 app.set('trust proxy', 1);
 
 // Enable CORS
@@ -26,7 +26,7 @@ app.use(
   })
 );
 
-// Use express.json() *before* the session middleware
+// Use express.json() before session
 app.use(express.json());
 
 // Session configuration
@@ -34,18 +34,18 @@ app.use(
   session({
     secret: process.env.SESSION_SECRET || 'your_secret_key',
     resave: false,
-    saveUninitialized: false, // Changed to false
+    saveUninitialized: false,
     store: MongoStore.create({
       mongoUrl: mongoURL,
       collectionName: 'sessions',
-      // Added touchAfter to minimize session updates
-      touchAfter: 24 * 3600, // Update session only after 24 hours (in seconds)
+      touchAfter: 24 * 3600,
     }),
     cookie: {
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      httpOnly: true, // Added httpOnly: true for security
+      httpOnly: true,
       domain: process.env.NODE_ENV === 'production' ? 'snipify-production.up.railway.app' : undefined,
+      path: '/', // Explicitly set the path
     },
   })
 );
@@ -77,7 +77,7 @@ app.get('/auth/login', (req, res) => {
     state: state,
   });
 
-  res.redirect('https://accounts.spotify.com/authorize?' + auth_query_parameters.toString()); // Corrected URL
+  res.redirect('https://accounts.spotify.com/authorize?' + auth_query_parameters.toString());
 });
 
 // Auth callback route
@@ -92,7 +92,7 @@ app.get('/auth/callback', async (req, res) => {
 
   try {
     const response = await axios.post(
-      'https://accounts.spotify.com/api/token', // Corrected URL
+      'https://accounts.spotify.com/api/token',
       new URLSearchParams({
         code: code,
         redirect_uri: `${process.env.SERVER_URL}/auth/callback`,
@@ -113,20 +113,24 @@ app.get('/auth/callback', async (req, res) => {
     // Store the tokens in the session
     req.session.access_token = access_token;
     req.session.refresh_token = refresh_token;
-    req.session.expires_in = expires_in; // Store expiration
-    req.session.cookie.maxAge = expires_in * 1000; // Set cookie expiration
+    req.session.expires_in = expires_in;
+    req.session.cookie.maxAge = expires_in * 1000;
 
-    req.session.save((err) => {
-      if (err) {
-        console.error('Error saving session:', err);
-        return res.status(500).send('Error saving session');
-      }
-      console.log('Session after login: ', req.session);
-      res.redirect(`${process.env.CLIENT_URL}`);
+     // IMPORTANT:  Save the session *before* any possible redirect or response
+    req.session.save(async (err) => { // Make the callback async to use await
+        if (err) {
+            console.error('Error saving session:', err);
+            return res.status(500).send('Error saving session');
+        }
+        console.log("Session after login: ", req.session);
+        // Only redirect *after* the session has been successfully saved
+        res.redirect(`${process.env.CLIENT_URL}`);
     });
+
+
   } catch (error) {
     console.error('Error during authentication:', error.response?.data || error.message);
-    res.status(500).send('Error during authentication: ' + (error.response?.data?.error_description || error.message)); // Include more error info
+    res.status(500).send('Error during authentication: ' + (error.response?.data?.error_description || error.message));
   }
 });
 
@@ -178,4 +182,3 @@ mongoose
   .catch((err) => {
     console.error('Error connecting to MongoDB:', err);
   });
-
