@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
-import request from 'request';
+import axios from 'axios';
 import session from 'express-session';
 import mongoose from 'mongoose';
 import MongoStore from 'connect-mongo';
@@ -38,7 +38,7 @@ app.use(session({
   }
 }));
 
-app.listen(port, () => {
+app.listen(process.env.PORT || port, () => {
   console.log(`Listening at ${process.env.SERVER_URL}`);
   console.log('Hello');
 });
@@ -68,34 +68,35 @@ app.get('/auth/login', (req, res) => {
 });
 
 // Auth callback route
-app.get('/auth/callback', (req, res) => {
-    console.log('Callback');
-    console.log('Session from callback:', req.session);
-    var code = req.query.code;
-    var authOptions = {
-        url: 'https://accounts.spotify.com/api/token',
-        form: {
+app.get('/auth/callback', async (req, res) => {
+  console.log('Callback');
+  console.log('Session from callback:', req.session);
+  const code = req.query.code;
+
+  try {
+    const response = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      new URLSearchParams({
         code: code,
         redirect_uri: `${process.env.SERVER_URL}/auth/callback`,
-        grant_type: 'authorization_code'
-        },
+        grant_type: 'authorization_code',
+      }).toString(),
+      {
         headers: {
-        'Authorization': 'Basic ' + (Buffer.from(spotify_client_id + ':' + spotify_client_secret).toString('base64')),
-        'Content-Type' : 'application/x-www-form-urlencoded'
-        },
-        json: true
-    };
-
-    request.post(authOptions, function(error, response, body) {
-        if (!error && response.statusCode === 200) {
-          // Store the access token in the session
-          req.session.access_token = body.access_token;
-          console.log("Session after login: ", req.session);
-          res.redirect(`${process.env.CLIENT_URL}`);
-        } else {
-          res.status(500).send('Error during authentication');
+          'Authorization': 'Basic ' + Buffer.from(`${spotify_client_id}:${spotify_client_secret}`).toString('base64'),
+          'Content-Type': 'application/x-www-form-urlencoded',
         }
-    });
+      }
+    );
+
+    // Store the access token in the session
+    req.session.access_token = response.data.access_token;
+    console.log("Session after login: ", req.session);
+    res.redirect(`${process.env.CLIENT_URL}`);
+  } catch (error) {
+    console.error('Error during authentication', error.response?.data || error.message);
+    res.status(500).send('Error during authentication');
+  }
 });
 
 // Route to get access token from session
