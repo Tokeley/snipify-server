@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 import axios from 'axios';
 import querystring from 'querystring';
 import crypto from 'crypto';
+import { runAddUserScript } from './addUser.js';
 
 config();
 
@@ -104,6 +105,23 @@ app.get('/auth/refresh_token', async (req, res) => {
   } catch (error) {
     console.error('Error refreshing token:', error.response?.data || error.message);
     res.status(500).send('Failed to refresh token');
+  }
+});
+
+// Add user endpoint
+app.post('/add-user', async (req, res) => {
+  const { fullName, email } = req.body;
+
+  if (!fullName || !email) {
+    return res.status(400).json({ success: false, message: 'Missing fullName or email in request body.' });
+  }
+
+  try {
+    await runAddUserScript(fullName, email);
+    res.status(200).json({ success: true, message: 'User added via Playwright script.' });
+  } catch (error) {
+    console.error('Playwright script failed:', error);
+    res.status(500).json({ success: false, message: 'Script failed to run.' });
   }
 });
 
