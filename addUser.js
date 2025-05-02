@@ -43,13 +43,14 @@ export async function runAddUserScript(fullName, email) {
       await page.waitForTimeout(3000);
       await page.click('button:has-text("Log In")');
     } else {
-      await page.waitForTimeout(1000);
+      console.log('Password field did not appear, waiting for Continue button...');
+      await page.waitForSelector('button[data-testid="login-button"]', { timeout: 10000 });
       console.log('Clicking the Continue button...');
       await page.click('button[data-testid="login-button"]');
 
       console.log('Waiting for "Log in with a password" button...');
-      await page.waitForSelector('button:has-text("Log in with a password")', { timeout: 10000 });
-      await page.click('button:has-text("Log in with a password")');
+      await page.waitForSelector('button[data-encore-id="buttonTertiary"]', { timeout: 10000 });
+      await page.click('button[data-encore-id="buttonTertiary"]');
       
       console.log('Waiting for password field...');
       await page.waitForSelector('input[placeholder="Password"]', { visible: true, timeout: 10000 });
