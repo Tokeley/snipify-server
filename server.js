@@ -5,6 +5,7 @@ import axios from 'axios';
 import querystring from 'querystring';
 import crypto from 'crypto';
 import { runAddUserScript } from './addUser.js';
+import nodemailer from 'nodemailer';
 
 config();
 
@@ -122,6 +123,36 @@ app.post('/add-user', async (req, res) => {
   } catch (error) {
     console.error('Playwright script failed:', error);
     res.status(500).json({ success: false, message: 'Script failed to run.' + error.message });
+  }
+});
+
+router.post('/send-user-info', async (req, res) => {
+  const { fullName, email } = req.body;
+
+  if (!fullName || !email) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.NOTIFY_EMAIL_USER,
+        pass: process.env.NOTIFY_EMAIL_PASS,
+      }
+    });
+
+    await transporter.sendMail({
+      from: `"Spotify Bot" <${process.env.NOTIFY_EMAIL_USER}>`,
+      to: 'alex.t.manning@gmail.com',
+      subject: '🎧 New User Request for Spotify Dev Access',
+      text: `Request to add user to Spotify Dev Dashboard:\n\nFull Name: ${fullName}\nEmail: ${email}`
+    });
+
+    res.status(200).json({ message: 'Email sent' });
+  } catch (err) {
+    console.error('Failed to send email:', err);
+    res.status(500).json({ error: 'Email failed to send' });
   }
 });
 
