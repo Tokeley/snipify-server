@@ -20,7 +20,7 @@ async function sendFailureEmail(fullName, email) {
 
 export async function runAddUserScript(fullName, email) {
   const browser = await chromium.launch({
-    headless: true,
+    headless: false,
     slowMo: 100,
     chromiumSandbox: false
   });
@@ -33,11 +33,31 @@ export async function runAddUserScript(fullName, email) {
     await page.click('button:has-text("Log in")');
     await page.waitForTimeout(3000);
     await page.fill('input[placeholder="Email or username"]', process.env.SPOTIFY_USERNAME);
+
     console.log('Waiting for password field to appear...');
-    await page.waitForSelector('input[placeholder="Password"]', { visible: true, timeout: 60000 });
-    await page.fill('input[placeholder="Password"]', process.env.SPOTIFY_PASSWORD);
-    await page.waitForTimeout(3000);
-    await page.click('button:has-text("Log In")');
+    const passwordField = await page.waitForSelector('input[placeholder="Password"]', { timeout: 10000 }).catch(() => null);
+
+    if (passwordField) {
+      console.log('Password field appeared, filling in...');
+      await page.fill('input[placeholder="Password"]', process.env.SPOTIFY_PASSWORD);
+      await page.waitForTimeout(3000);
+      await page.click('button:has-text("Log In")');
+    } else {
+      await page.waitForTimeout(1000);
+      console.log('Clicking the Continue button...');
+      await page.click('button[data-testid="login-button"]');
+
+      console.log('Waiting for "Log in with a password" button...');
+      await page.waitForSelector('button:has-text("Log in with a password")', { timeout: 10000 });
+      await page.click('button:has-text("Log in with a password")');
+      
+      console.log('Waiting for password field...');
+      await page.waitForSelector('input[placeholder="Password"]', { visible: true, timeout: 10000 });
+      await page.fill('input[placeholder="Password"]', process.env.SPOTIFY_PASSWORD);
+      await page.waitForTimeout(3000);
+      await page.click('button:has-text("Log In")');
+    }
+
     await page.waitForTimeout(4000);
     await page.goto('https://developer.spotify.com/dashboard/09b8b17d93aa46e386961ecee775447e/users');
 
