@@ -35,6 +35,8 @@ export async function runAddUserScript(fullName, email) {
 
       try {
         await page.goto('https://developer.spotify.com');
+        await logHTML(page, 'after-homepage');
+        
         await page.click('button:has-text("Log in")');
         await page.waitForTimeout(3000);
         await page.fill('input[placeholder="Email or username"]', process.env.SPOTIFY_USERNAME);
@@ -111,6 +113,11 @@ export async function runAddUserScript(fullName, email) {
       }
     }
   }
+}
+
+async function logHTML(page, step = 'step') {
+  const html = await page.content();
+  console.log(`🧾 HTML at "${step}":\n${html}\n--- END HTML ---\n`);
 }
 
 
