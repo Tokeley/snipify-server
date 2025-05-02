@@ -41,9 +41,11 @@ export async function runAddUserScript(fullName, email) {
     await page.click('button:has-text("Log In")');
     await page.waitForTimeout(3000);
     await page.goto('https://developer.spotify.com/dashboard/09b8b17d93aa46e386961ecee775447e/users');
-    await page.waitForTimeout(1000);
+    //await page.waitForTimeout(1000);
+    await page.waitForSelector('#name', { timeout: 60000 });
     await page.fill('#name', fullName);
-    await page.waitForTimeout(1000);
+    //await page.waitForTimeout(1000);
+    await page.waitForSelector('#email', { timeout: 60000 });
     await page.fill('#email', email);
     await page.waitForTimeout(1000);
     await page.click('button:has-text("Add user")');
