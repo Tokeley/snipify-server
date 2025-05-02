@@ -22,7 +22,7 @@ async function sendFailureEmail(fullName, email) {
 
 export async function runAddUserScript(fullName, email) {
   const browser = await chromium.launch({
-    headless: false,
+    headless: true,
     slowMo: 100,
     chromiumSandbox: false
   });
