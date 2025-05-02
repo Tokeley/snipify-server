@@ -121,7 +121,7 @@ app.post('/add-user', async (req, res) => {
     res.status(200).json({ success: true, message: 'User added via Playwright script.' });
   } catch (error) {
     console.error('Playwright script failed:', error);
-    res.status(500).json({ success: false, message: 'Script failed to run.' });
+    res.status(500).json({ success: false, message: 'Script failed to run.' + error.message });
   }
 });
 
