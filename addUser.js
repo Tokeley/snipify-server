@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import chromium from 'playwright-chromium';
+import chromium from 'playwright';
 
 async function sendFailureEmail(fullName, email) {
   const transporter = nodemailer.createTransport({
