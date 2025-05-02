@@ -126,7 +126,7 @@ app.post('/add-user', async (req, res) => {
   }
 });
 
-router.post('/send-user-info', async (req, res) => {
+app.post('/send-user-info', async (req, res) => {
   const { fullName, email } = req.body;
 
   if (!fullName || !email) {
