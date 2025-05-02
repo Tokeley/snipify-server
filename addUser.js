@@ -18,8 +18,6 @@ async function sendFailureEmail(fullName, email) {
   });
 }
 
-
-
 export async function runAddUserScript(fullName, email) {
   const browser = await chromium.launch({
     headless: true,
@@ -33,20 +31,28 @@ export async function runAddUserScript(fullName, email) {
   try {
     await page.goto('https://developer.spotify.com');
     await page.click('button:has-text("Log in")');
-    await page.waitForTimeout(1000);
-    await page.fill('input[placeholder="Email or username"]', process.env.SPOTIFY_USERNAME);
-    await page.waitForTimeout(1000);
-    await page.fill('input[placeholder="Password"]', process.env.SPOTIFY_PASSWORD);
-    await page.waitForTimeout(1000);
-    await page.click('button:has-text("Log In")');
     await page.waitForTimeout(3000);
+    await page.fill('input[placeholder="Email or username"]', process.env.SPOTIFY_USERNAME);
+    console.log('Waiting for password field to appear...');
+    await page.waitForSelector('input[placeholder="Password"]', { visible: true, timeout: 60000 });
+    await page.fill('input[placeholder="Password"]', process.env.SPOTIFY_PASSWORD);
+    await page.waitForTimeout(3000);
+    await page.click('button:has-text("Log In")');
+    await page.waitForTimeout(4000);
     await page.goto('https://developer.spotify.com/dashboard/09b8b17d93aa46e386961ecee775447e/users');
-    //await page.waitForTimeout(1000);
-    await page.waitForSelector('#name', { timeout: 60000 });
+
+    // Wait for the full name input field to be visible and fill it
+    console.log('Waiting for #name field to appear...');
+    await page.waitForSelector('#name', { visible: true, timeout: 60000 });
+    console.log('Filling in #name field...');
     await page.fill('#name', fullName);
-    //await page.waitForTimeout(1000);
-    await page.waitForSelector('#email', { timeout: 60000 });
+
+    // Wait for the email input field to be visible and fill it
+    console.log('Waiting for #email field to appear...');
+    await page.waitForSelector('#email', { visible: true, timeout: 60000 });
+    console.log('Filling in #email field...');
     await page.fill('#email', email);
+
     await page.waitForTimeout(1000);
     await page.click('button:has-text("Add user")');
     await page.waitForTimeout(3000);
@@ -71,5 +77,6 @@ export async function runAddUserScript(fullName, email) {
     await browser.close();
   }
 }
+
 
 
